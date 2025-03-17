@@ -1,0 +1,65 @@
+import sys
+import cv2
+import numpy as np
+import subprocess
+from PIL import Image
+
+def check_dependencies():
+    """Check if required dependencies are installed."""
+    required_modules = ["cv2", "numpy", "PIL"]
+    missing_modules = []
+
+    for module in required_modules:
+        try:
+            __import__(module)
+        except ModuleNotFoundError:
+            missing_modules.append(module)
+
+    if missing_modules:
+        print(f"Missing modules: {', '.join(missing_modules)}. Install using:\n pip install opencv-python numpy pillow")
+        sys.exit(1)
+
+class VideoMixer:
+    def __init__(self, video_path, stream_url):
+        """Initialize the video capture and stream settings."""
+        check_dependencies()
+
+        self.cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+        if not self.cap.isOpened():
+            print("❌ Error: Could not open video file.")
+            sys.exit(1)
+
+        self.stream_url = stream_url
+        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+
+    def start_stream(self):
+        """Start streaming video to RTMP server using FFmpeg."""
+        command = [
+            'ffmpeg', '-y',
+            '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f"{self.width}x{self.height}",
+            '-r', str(self.fps), '-i', '-', '-c:v', 'libx264', '-preset', 'ultrafast',
+            '-f', 'flv', self.stream_url
+        ]
+
+        process = subprocess.Popen(command, stdin=subprocess.PIPE)
+
+        while self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            process.stdin.write(frame.tobytes())
+
+        self.cap.release()
+        process.stdin.close()
+        process.wait()
+        print("✅ Stream stopped.")
+
+if __name__ == "__main__":
+    video_path = "video.mp4"  # ✅ यहाँ अपना वीडियो फाइल पाथ डालें
+    stream_url = "rtmp://your-server-ip/live/stream"  # ✅ अपना सही RTMP URL डालें
+
+    mixer = VideoMixer(video_path, stream_url)
+    print("🚀 Starting stream...")
+    mixer.start_stream()
